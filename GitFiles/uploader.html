@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Folder Uploader</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Simple spinner for loading states */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 2s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Style file input button */
+        input[type="file"]::file-selector-button {
+            @apply bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-md text-sm transition duration-300 cursor-pointer border-0;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-3xl space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-2xl md:text-3xl font-bold text-teal-400">GitHub Folder Uploader</h1>
+            <p class="text-gray-400 mt-2">Upload a folder to a specific branch and path in a GitHub repository.</p>
+        </div>
+
+        <!-- Security Warning -->
+        <div class="bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-r-lg" role="alert">
+            <p class="font-bold">Important Note:</p>
+            <p class="text-sm">This tool commits directly to the specified branch. Your Personal Access Token (PAT) requires 'repo' scope and is handled only in your browser. The folder-picker is supported in Chrome/Edge but may not work in all browsers.</p>
+        </div>
+
+        <!-- Form for Inputs -->
+        <form id="uploadForm" class="space-y-4">
+            <!-- PAT -->
+            <div>
+                <label for="pat" class="block text-sm font-medium text-gray-300">GitHub Personal Access Token (PAT)</label>
+                <input type="password" id="pat" name="pat" placeholder="Requires 'repo' scope" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+            </div>
+
+            <!-- Repo Details -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="owner" class="block text-sm font-medium text-gray-300">Repository Owner</label>
+                    <input type="text" id="owner" name="owner" placeholder="e.g., octocat" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+                </div>
+                <div>
+                    <label for="repo" class="block text-sm font-medium text-gray-300">Repository Name</label>
+                    <input type="text" id="repo" name="repo" placeholder="e.g., Hello-World" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+                </div>
+                <div>
+                    <label for="branch" class="block text-sm font-medium text-gray-300">Branch Name</label>
+                    <input type="text" id="branch" name="branch" placeholder="e.g., main" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+                </div>
+                 <div>
+                    <label for="path" class="block text-sm font-medium text-gray-300">Target Folder in Repo (Optional)</label>
+                    <input type="text" id="path" name="path" placeholder="e.g., src/assets" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+                </div>
+            </div>
+            
+            <!-- Commit Details -->
+            <div>
+                <label for="commitMessage" class="block text-sm font-medium text-gray-300">Commit Message</label>
+                <input type="text" id="commitMessage" name="commitMessage" placeholder="feat: Add new documentation files" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2">
+            </div>
+             <div>
+                <label for="commitDescription" class="block text-sm font-medium text-gray-300">Commit Description (Optional)</label>
+                <textarea id="commitDescription" name="commitDescription" rows="3" placeholder="More detailed description of the changes..." class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2"></textarea>
+            </div>
+
+            <!-- File Input -->
+            <div>
+                <label for="files" class="block text-sm font-medium text-gray-300">Folder to Upload</label>
+                <input type="file" id="files" name="files" webkitdirectory directory multiple required class="mt-1 block w-full text-gray-300 text-sm">
+                <span id="fileCount" class="text-xs text-gray-400 mt-1 block">No folder selected.</span>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 flex items-center justify-center">
+                Upload to GitHub
+            </button>
+        </form>
+
+        <!-- Status & Feedback Area -->
+        <div id="status" class="hidden mt-4 p-3 rounded-md text-center"></div>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const uploadForm = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        const fileInput = document.getElementById('files');
+        const fileCountSpan = document.getElementById('fileCount');
+
+        // --- UI Helpers ---
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileCountSpan.textContent = `${fileInput.files.length} files selected.`;
+            } else {
+                fileCountSpan.textContent = 'No folder selected.';
+            }
+        });
+
+        function showStatus(message, type = 'info', isLoading = false) {
+            statusDiv.innerHTML = ''; // Clear previous
+            if (isLoading) {
+                const loader = document.createElement('div');
+                loader.className = 'loader';
+                statusDiv.appendChild(loader);
+            }
+            const text = document.createElement('span');
+            text.className = 'ml-3';
+            text.innerHTML = message; // Use innerHTML to allow links
+            statusDiv.appendChild(text);
+
+            statusDiv.className = 'mt-4 p-3 rounded-md text-center flex items-center justify-center ';
+            switch (type) {
+                case 'error':   statusDiv.classList.add('bg-red-900', 'text-red-100'); break;
+                case 'success': statusDiv.classList.add('bg-green-900', 'text-green-100'); break;
+                default:        statusDiv.classList.add('bg-blue-900', 'text-blue-100');
+            }
+            statusDiv.classList.remove('hidden');
+        }
+
+        function setFormDisabled(disabled) {
+            submitBtn.disabled = disabled;
+            submitBtn.classList.toggle('opacity-50', disabled);
+            submitBtn.classList.toggle('cursor-not-allowed', disabled);
+        }
+
+        // --- Main Form Submission Logic ---
+        uploadForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            setFormDisabled(true);
+
+            const { pat, owner, repo, branch, path, commitMessage, commitDescription } = Object.fromEntries(new FormData(uploadForm));
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                showStatus('Please select a folder to upload.', 'error');
+                setFormDisabled(false);
+                return;
+            }
+
+            const apiBase = 'https://api.github.com';
+            const headers = {
+                'Authorization': `Bearer ${pat}`,
+                'Accept': 'application/vnd.github.v3+json'
+            };
+
+            try {
+                // 1. Get the latest commit SHA of the branch
+                showStatus('Step 1/6: Fetching latest commit...', 'info', true);
+                const branchRefUrl = `${apiBase}/repos/${owner}/${repo}/git/refs/heads/${branch}`;
+                const refResponse = await fetch(branchRefUrl, { headers });
+                if (!refResponse.ok) throw new Error(`Could not get branch info. Is the branch name correct? (Status: ${refResponse.status})`);
+                const refData = await refResponse.json();
+                const baseCommitSha = refData.object.sha;
+
+                // 2. Get the tree SHA from that commit
+                const commitUrl = `${apiBase}/repos/${owner}/${repo}/git/commits/${baseCommitSha}`;
+                const commitResponse = await fetch(commitUrl, { headers });
+                if (!commitResponse.ok) throw new Error('Could not get commit info.');
+                const commitData = await commitResponse.json();
+                const baseTreeSha = commitData.tree.sha;
+
+                // 3. Create a blob for each file
+                showStatus('Step 2/6: Reading local files...', 'info', true);
+                const filePromises = Array.from(files).map(file => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve({ file, content: reader.result.split(',')[1] });
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                });
+                const fileData = await Promise.all(filePromises);
+
+                showStatus(`Step 3/6: Creating blobs for ${fileData.length} files...`, 'info', true);
+                const blobPromises = fileData.map(({ content }) => {
+                    return fetch(`${apiBase}/repos/${owner}/${repo}/git/blobs`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ content, encoding: 'base64' })
+                    }).then(res => res.json());
+                });
+                const blobData = await Promise.all(blobPromises);
+
+                // 4. Create a new tree
+                showStatus('Step 4/6: Creating new file tree...', 'info', true);
+                const tree = blobData.map((blob, index) => {
+                    const file = fileData[index].file;
+                    // Construct the full path within the repo
+                    const filePath = (path ? `${path}/` : '') + file.webkitRelativePath;
+                    return {
+                        path: filePath,
+                        mode: '100644', // file mode
+                        type: 'blob',
+                        sha: blob.sha,
+                    };
+                });
+                
+                const treeUrl = `${apiBase}/repos/${owner}/${repo}/git/trees`;
+                const treeResponse = await fetch(treeUrl, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ base_tree: baseTreeSha, tree })
+                });
+                if (!treeResponse.ok) throw new Error('Could not create the new tree.');
+                const newTreeData = await treeResponse.json();
+
+                // 5. Create a new commit
+                showStatus('Step 5/6: Creating commit...', 'info', true);
+                const fullCommitMessage = commitDescription 
+                    ? `${commitMessage}\n\n${commitDescription}` 
+                    : commitMessage;
+
+                const newCommitUrl = `${apiBase}/repos/${owner}/${repo}/git/commits`;
+                const newCommitResponse = await fetch(newCommitUrl, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        message: fullCommitMessage,
+                        tree: newTreeData.sha,
+                        parents: [baseCommitSha]
+                    })
+                });
+                if (!newCommitResponse.ok) throw new Error('Could not create the new commit.');
+                const newCommitData = await newCommitResponse.json();
+
+                // 6. Update the branch reference (push)
+                showStatus('Step 6/6: Pushing changes to branch...', 'info', true);
+                const updateRefResponse = await fetch(branchRefUrl, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ sha: newCommitData.sha })
+                });
+                if (!updateRefResponse.ok) throw new Error('Could not update the branch reference (push failed).');
+
+                const repoUrl = `https://github.com/${owner}/${repo}/tree/${branch}/${path || ''}`;
+                showStatus(`✅ Success! Folder uploaded. <a href="${repoUrl}" target="_blank" class="font-bold underline text-teal-300">View in repository.</a>`, 'success');
+
+            } catch (error) {
+                console.error('Upload failed:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                setFormDisabled(false);
+            }
+        });
+    });
+    </script>
+
+</body>
+</html>
