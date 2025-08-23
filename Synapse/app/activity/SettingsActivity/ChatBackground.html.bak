@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chat Background - Synapse</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        // Configure Tailwind CSS with a Material 3 inspired theme
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], },
+                    borderRadius: {
+                        'xl': '12px', '2xl': '16px', '3xl': '24px',
+                    },
+                    colors: {
+                        // Light Theme Colors
+                        primary: '#3B5BA9',
+                        'on-primary': '#FFFFFF',
+                        'primary-container': '#DDE1FF',
+                        'on-primary-container': '#001848',
+                        surface: '#FEFBFF',
+                        'on-surface': '#1B1B1F',
+                        'surface-variant': '#E1E2EC',
+                        'on-surface-variant': '#45464F',
+                        'surface-container': '#F2F0F4',
+                        'surface-container-high': '#EBEAF0',
+                        'surface-container-highest': '#E6E4EA',
+                        outline: '#767680',
+                        'outline-variant': '#C5C6D0',
+
+                        // Dark Theme Colors
+                        'dark-primary': '#B5C4FF',
+                        'dark-on-primary': '#002B73',
+                        'dark-primary-container': '#20428F',
+                        'dark-on-primary-container': '#DDE1FF',
+                        'dark-surface': '#1B1B1F',
+                        'dark-on-surface': '#E4E2E6',
+                        'dark-surface-variant': '#45464F',
+                        'dark-on-surface-variant': '#C6C6D0',
+                        'dark-surface-container': '#201F23',
+                        'dark-surface-container-high': '#2A2A2E',
+                        'dark-surface-container-highest': '#353439',
+                        'dark-outline': '#90909A',
+                        'dark-outline-variant': '#45464F',
+                    },
+                },
+            },
+        };
+    </script>
+
+    <style>
+        /* General Setup & M3 Globals */
+        * { -webkit-tap-highlight-color: transparent; }
+        html { scroll-behavior: smooth; }
+        body { transition: background-color 0.3s ease, color 0.3s ease; overflow: hidden; }
+        #appContainer { height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Preview Styling */
+        .preview-container {
+            background: var(--preview-bg, #e5e7eb);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .preview-bg-image, .preview-pattern-overlay { position: absolute; inset: 0; transition: all 0.3s ease; }
+        .preview-bg-image { background-size: cover; background-position: center; filter: var(--preview-filter, 'none'); transform: var(--preview-transform, 'none'); }
+        .preview-pattern-overlay { background-size: 300px; opacity: var(--preview-pattern-opacity, 0.5); }
+        
+        .preview-message { box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.3s ease, color 0.3s ease; }
+        .incoming-bubble { @apply bg-surface-container-high dark:bg-dark-surface-container-high text-on-surface dark:text-dark-on-surface; }
+        .outgoing-bubble { @apply bg-primary-container dark:bg-dark-primary-container text-on-primary-container dark:text-dark-on-primary-container; }
+
+        /* M3 adjustments for bubbles on dark custom backgrounds */
+        .preview-container.bg-is-dark .incoming-bubble { background-color: #353439; color: #E4E2E6; }
+        .preview-container.bg-is-dark .outgoing-bubble { background-color: #20428F; color: #DDE1FF; }
+
+        /* M3 Selectable Item */
+        .selectable-item {
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .selectable-item:hover { transform: scale(1.03); }
+        .selectable-item .check-icon {
+            position: absolute;
+            width: 24px; height: 24px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--on-primary);
+            background-color: var(--primary);
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .selectable-item.selected .check-icon { opacity: 1; transform: scale(1); }
+        
+        /* M3 Horizontal Scroll */
+        .horizontal-scroll {
+            display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+            padding: 0.25rem 1.5rem; margin: -0.25rem -1.5rem; /* For peeking effect */
+            scrollbar-width: none;
+        }
+        .horizontal-scroll::-webkit-scrollbar { display: none; }
+        
+        /* M3 Switch (Toggle) */
+        .m3-switch { width: 52px; height: 32px; padding: 4px; transition: background-color 0.2s ease; @apply rounded-full bg-surface-container-highest dark:bg-dark-surface-container-highest; }
+        .m3-switch-thumb { width: 16px; height: 16px; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); @apply bg-outline dark:bg-dark-outline rounded-full shadow-md flex items-center justify-center; }
+        .peer:checked ~ .m3-switch { @apply bg-primary dark:bg-dark-primary; }
+        .peer:checked ~ .m3-switch .m3-switch-thumb {
+            transform: translateX(20px);
+            width: 24px; height: 24px;
+            @apply bg-on-primary dark:bg-dark-on-primary;
+        }
+
+        /* M3 Slider */
+        input[type="range"].m3-slider { -webkit-appearance: none; background: transparent; width: 100%; height: 24px; }
+        input[type="range"].m3-slider:focus { outline: none; }
+        input[type="range"].m3-slider::-webkit-slider-runnable-track {
+            height: 4px; cursor: pointer; border-radius: 2px;
+            @apply bg-surface-container-highest dark:bg-dark-surface-container-highest;
+        }
+        input[type="range"].m3-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%;
+            cursor: pointer; transition: transform 0.1s ease;
+            @apply bg-primary dark:bg-dark-primary shadow-lg;
+        }
+        input[type="range"].m3-slider::-webkit-slider-thumb:active { transform: scale(1.2); }
+    </style>
+</head>
+<body class="bg-surface dark:bg-dark-surface text-on-surface dark:text-dark-on-surface font-sans">
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-surface dark:bg-dark-surface flex items-center justify-center z-50 transition-opacity duration-300">
+        <i class="fa-solid fa-image text-4xl text-primary dark:text-dark-primary animate-pulse"></i>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="appContainer" class="max-w-xl mx-auto relative overflow-x-hidden bg-surface-container dark:bg-dark-surface-container hidden">
+        
+        <!-- Fixed Header (M3 Center-aligned Top App Bar) -->
+        <header class="fixed top-0 left-0 right-0 max-w-xl mx-auto h-16 bg-surface/80 dark:bg-dark-surface/80 backdrop-blur-sm z-30 px-2 flex items-center justify-between">
+            <button onclick="window.location.href='ChatSettings.html'" aria-label="Go back" class="w-12 h-12 flex items-center justify-center shrink-0 rounded-full text-on-surface dark:text-dark-on-surface hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <h1 class="text-xl font-medium text-on-surface dark:text-dark-on-surface px-4 truncate flex-grow text-center">
+                Chat Background
+            </h1>
+            <div class="w-12 h-12 shrink-0"></div> <!-- Spacer for centering -->
+        </header>
+
+        <!-- Fixed Preview -->
+        <div class="fixed top-16 left-0 right-0 max-w-xl mx-auto z-20 px-4">
+            <div class="preview-container w-full h-64 rounded-3xl p-4 flex flex-col justify-end shadow-inner">
+                <div class="preview-bg-image"></div>
+                <div class="preview-pattern-overlay"></div>
+                <div class="relative space-y-2">
+                    <div class="preview-message incoming-bubble rounded-2xl rounded-bl-lg p-2.5 max-w-[70%] self-start">
+                        <p class="text-sm">Hey, check out this new background!</p>
+                    </div>
+                    <div class="preview-message outgoing-bubble rounded-2xl rounded-br-lg p-2.5 max-w-[70%] ml-auto self-end">
+                        <p class="text-sm">Wow, it's awesome! How did you set it?</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scrolling Options -->
+        <div id="options-scroller" class="flex-grow overflow-y-auto">
+            <div class="space-y-4 pb-24" style="padding-top: 296px;">
+                <div class="options-container bg-surface-container dark:bg-dark-surface-container rounded-3xl p-4 sm:p-5 space-y-4 mx-4">
+                    <h3 class="text-base font-medium text-primary dark:text-dark-primary px-2">Set a color</h3>
+                    <div id="color-selector" class="horizontal-scroll gap-4"></div>
+                </div>
+
+                <div id="pattern-container" class="options-container bg-surface-container dark:bg-dark-surface-container rounded-3xl p-4 sm:p-5 space-y-4 mx-4">
+                    <h3 class="text-base font-medium text-primary dark:text-dark-primary px-2">Pattern</h3>
+                    <div id="pattern-selector" class="horizontal-scroll gap-4"></div>
+                    <div id="intensity-container" class="space-y-2 hidden pt-4 px-2">
+                        <div class="flex justify-between items-center">
+                            <h4 class="text-sm font-medium text-on-surface-variant dark:text-dark-on-surface-variant">Intensity</h4>
+                            <span id="intensity-value" class="text-sm font-bold text-on-surface-variant dark:text-dark-on-surface-variant">50%</span>
+                        </div>
+                        <input type="range" id="intensity-slider" min="0" max="100" value="50" class="m3-slider w-full">
+                    </div>
+                </div>
+
+                <div class="options-container bg-surface-container dark:bg-dark-surface-container rounded-3xl p-4 sm:p-5 space-y-4 mx-4">
+                    <h3 class="text-base font-medium text-primary dark:text-dark-primary px-2">Background Image</h3>
+                    <div id="image-selector" class="horizontal-scroll gap-4"></div>
+                </div>
+                
+                <div id="effects-container" class="bg-surface-container dark:bg-dark-surface-container rounded-3xl p-4 sm:p-5 space-y-3 mx-4">
+                    <div class="flex justify-between items-center px-2">
+                        <span class="font-medium text-on-surface dark:text-dark-on-surface">Blurred</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="blurToggle" class="sr-only peer">
+                            <div class="m3-switch flex items-center"><div class="m3-switch-thumb"></div></div>
+                        </label>
+                    </div>
+                     <div class="border-b border-outline-variant/50 dark:border-dark-outline-variant/50"></div>
+                    <div class="flex justify-between items-center px-2">
+                        <span class="font-medium text-on-surface dark:text-dark-on-surface">Motion</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="motionToggle" class="sr-only peer">
+                            <div class="m3-switch flex items-center"><div class="m3-switch-thumb"></div></div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="px-4 pt-4">
+                     <button id="set-background-btn" class="w-full py-3 bg-primary dark:bg-dark-primary text-on-primary dark:text-dark-on-primary font-bold rounded-full text-base tracking-wide hover:shadow-lg transition-shadow">Set Background</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = { apiKey: "AIzaSyCvefmiD5UjOo7ZkoUKhwNd0XGrnK52quE", authDomain: "synapse-social-sai.firebaseapp.com", databaseURL: "https://synapse-social-sai-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "synapse-social-sai", storageBucket: "synapse-social-sai.firebasestorage.app", appId: "1:269633434355:android:67b44261499ca8b0a3bd86" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        const dom = {
+            html: document.documentElement,
+            loadingOverlay: document.getElementById('loadingOverlay'),
+            appContainer: document.getElementById('appContainer'),
+            preview: document.querySelector('.preview-container'),
+            previewBgImage: document.querySelector('.preview-bg-image'),
+            previewPatternOverlay: document.querySelector('.preview-pattern-overlay'),
+            colorSelector: document.getElementById('color-selector'),
+            imageSelector: document.getElementById('image-selector'),
+            patternSelector: document.getElementById('pattern-selector'),
+            patternContainer: document.getElementById('pattern-container'),
+            intensityContainer: document.getElementById('intensity-container'),
+            intensitySlider: document.getElementById('intensity-slider'),
+            intensityValue: document.getElementById('intensity-value'),
+            effectsContainer: document.getElementById('effects-container'),
+            blurToggle: document.getElementById('blurToggle'),
+            motionToggle: document.getElementById('motionToggle'),
+            setBtn: document.getElementById('set-background-btn'),
+        };
+
+        let currentUser = null;
+        let userSettings = {};
+        let currentSelection = {};
+
+        const defaultSettings = {
+            theme: "system",
+            chatBackground: { type: 'color', value: '#F2F0F4', pattern: null, intensity: 50, blur: false, motion: false },
+        };
+        
+        const chatBackgroundColors = [ {v: '#F2F0F4'}, {v: '#fecaca'}, {v: '#fed7aa'}, {v: '#fef08a'}, {v: '#d9f99d'}, {v: '#bfdbfe'}, {v: '#e9d5ff'} ];
+        const chatBackgroundGradients = [ {v: 'linear-gradient(to bottom, #a18cd1, #fbc2eb)', t: 'dark'}, {v: 'linear-gradient(to bottom, #ff9a9e, #fad0c4)', t: 'light'}, {v: 'linear-gradient(to bottom, #84fab0, #8fd3f4)', t: 'light'}, {v: 'linear-gradient(to bottom, #2b5876, #4e4376)', t: 'dark'}, {v: 'linear-gradient(to bottom, #e55d87, #5fc3e4)', t: 'dark'}, {v: 'linear-gradient(to bottom, #f6d365, #fda085)', t: 'light'} ];
+        const chatBackgroundPatterns = ["https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png1.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png2.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png3.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png4.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png5.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png6.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png7.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png8.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png9.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png10.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png11.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png12.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png13.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png14.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png15.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png16.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png17.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png18.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png19.svg","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgpattern-png20.svg"];
+        const chatBackgroundImages = ["https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper1.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper2.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper3.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper4.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper5.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper6.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper7.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper8.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper9.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper10.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper11.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper12.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper13.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper14.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper15.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper16.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper17.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper18.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper19.png","https://raw.githubusercontent.com/StudioAsInc/web/refs/heads/main/bgWallpaper20.png"];
+        
+        function getLuminance(hex) {
+            hex = hex.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        }
+
+        function init() {
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    currentUser = user;
+                    await loadSettings(user.uid);
+                    buildUI();
+                    initEventListeners();
+                    dom.loadingOverlay.classList.add('opacity-0');
+                    dom.appContainer.classList.remove('hidden');
+                    setTimeout(() => dom.loadingOverlay.classList.add('hidden'), 300);
+                } else {
+                    window.location.href = 'SettingsActivity.html';
+                }
+            });
+        }
+
+        async function loadSettings(uid) {
+            try {
+                const snapshot = await database.ref(`users/${uid}/settings`).once('value');
+                const loadedSettings = snapshot.val();
+                userSettings = { ...defaultSettings, ...loadedSettings };
+                if (!loadedSettings || !loadedSettings.chatBackground) {
+                    userSettings.chatBackground = { ...defaultSettings.chatBackground };
+                }
+                currentSelection = JSON.parse(JSON.stringify(userSettings.chatBackground));
+            } catch (error) {
+                userSettings = { ...defaultSettings };
+                currentSelection = { ...defaultSettings.chatBackground };
+            }
+        }
+        
+        async function saveSettings() {
+            userSettings.chatBackground = currentSelection;
+            if (!currentUser) return;
+            try {
+                await database.ref(`users/${currentUser.uid}/settings`).update(userSettings);
+                console.log("Settings saved to Firebase.");
+            } catch (error) { console.error("Error saving settings:", error); }
+        }
+        
+        function buildUI() {
+            applyTheme();
+            buildSelectors();
+            updateUI();
+        }
+        
+        function buildSelectors() {
+            const createItem = (type, data, parent) => {
+                const item = document.createElement('div');
+                item.className = 'selectable-item flex-shrink-0';
+                item.dataset.type = type;
+                item.dataset.value = data.v || data;
+                if (data.t) item.dataset.theme = data.t;
+                
+                const checkIcon = document.createElement('div');
+                checkIcon.className = 'check-icon';
+                checkIcon.innerHTML = `<i class="fas fa-check text-sm"></i>`;
+                item.appendChild(checkIcon);
+
+                if (type === 'color' || type === 'gradient') {
+                    item.classList.add('w-14', 'h-14', 'rounded-full', 'border-2', 'border-outline-variant/50', 'dark:border-dark-outline-variant/50');
+                    item.style.background = data.v || data;
+                } else if (type === 'pattern') {
+                    item.classList.add('w-16', 'h-16', 'rounded-2xl', 'bg-surface-container-high', 'dark:bg-dark-surface-container-high', 'border-2', 'border-outline-variant/50', 'dark:border-dark-outline-variant/50');
+                    item.style.backgroundImage = `url(${data})`;
+                    item.style.backgroundSize = 'cover';
+                } else { // image
+                    item.classList.add('w-24', 'h-32', 'object-cover', 'rounded-2xl', 'bg-surface-container-high', 'dark:bg-dark-surface-container-high');
+                    item.style.backgroundImage = `url(${data})`;
+                    item.style.backgroundSize = 'cover';
+                    item.style.backgroundPosition = 'center';
+                }
+                parent.appendChild(item);
+            };
+
+            [...chatBackgroundColors, ...chatBackgroundGradients].forEach(c => createItem(c.v.startsWith('linear') ? 'gradient' : 'color', c, dom.colorSelector));
+            chatBackgroundImages.forEach(url => createItem('image', url, dom.imageSelector));
+            chatBackgroundPatterns.forEach(url => createItem('pattern', url, dom.patternSelector));
+        }
+
+        function initEventListeners() {
+            const handleSelection = (e, selectionType) => {
+                const target = e.target.closest('[data-value]');
+                if (target) {
+                    if (selectionType === 'pattern') {
+                        const value = target.dataset.value;
+                        currentSelection.pattern = (currentSelection.pattern === value) ? null : value;
+                    } else {
+                        currentSelection.type = target.dataset.type;
+                        currentSelection.value = target.dataset.value;
+                        if(target.dataset.theme) currentSelection.theme = target.dataset.theme;
+                        else delete currentSelection.theme;
+                    }
+                    updateUI();
+                }
+            };
+
+            dom.colorSelector.addEventListener('click', e => handleSelection(e, 'color'));
+            dom.imageSelector.addEventListener('click', e => handleSelection(e, 'image'));
+            dom.patternSelector.addEventListener('click', e => handleSelection(e, 'pattern'));
+
+            dom.intensitySlider.addEventListener('input', e => { currentSelection.intensity = e.target.value; updateUI(); });
+            dom.blurToggle.addEventListener('change', e => { currentSelection.blur = e.target.checked; updateUI(); });
+            dom.motionToggle.addEventListener('change', e => { currentSelection.motion = e.target.checked; updateUI(); });
+            dom.setBtn.addEventListener('click', async () => { await saveSettings(); window.location.href = 'ChatSettings.html'; });
+        }
+        
+        function updateUI() {
+            document.querySelectorAll('.selectable-item.selected').forEach(el => el.classList.remove('selected'));
+            const selectedItem = document.querySelector(`.selectable-item[data-value="${currentSelection.value}"]`);
+            if (selectedItem) selectedItem.classList.add('selected');
+            const selectedPattern = document.querySelector(`.selectable-item[data-value="${currentSelection.pattern}"]`);
+            if (selectedPattern) selectedPattern.classList.add('selected');
+
+            const isImage = currentSelection.type === 'image';
+            const hasPattern = !!currentSelection.pattern;
+            
+            dom.effectsContainer.classList.toggle('opacity-40', !isImage);
+            dom.effectsContainer.classList.toggle('pointer-events-none', !isImage);
+            dom.blurToggle.checked = isImage && currentSelection.blur;
+            dom.motionToggle.checked = isImage && currentSelection.motion;
+
+            dom.patternContainer.classList.toggle('opacity-40', isImage);
+            dom.patternContainer.classList.toggle('pointer-events-none', isImage);
+            dom.intensityContainer.classList.toggle('hidden', !hasPattern || isImage);
+            dom.intensitySlider.value = currentSelection.intensity;
+            dom.intensityValue.textContent = `${currentSelection.intensity}%`;
+            
+            dom.previewBgImage.style.backgroundImage = 'none';
+            dom.preview.style.background = 'transparent';
+            dom.previewPatternOverlay.style.backgroundImage = 'none';
+
+            if (isImage) {
+                dom.previewBgImage.style.backgroundImage = `url(${currentSelection.value})`;
+                dom.previewBgImage.style.filter = currentSelection.blur ? 'blur(10px)' : 'none';
+                dom.previewBgImage.style.transform = currentSelection.motion ? 'scale(1.2)' : 'scale(1)';
+                dom.preview.classList.remove('bg-is-dark');
+            } else {
+                dom.preview.style.setProperty('--preview-bg', currentSelection.value);
+                dom.previewPatternOverlay.style.backgroundImage = currentSelection.pattern ? `url(${currentSelection.pattern})` : 'none';
+                dom.previewPatternOverlay.style.setProperty('--preview-pattern-opacity', currentSelection.intensity / 100);
+
+                let isDarkBg = false;
+                if (currentSelection.type === 'color') isDarkBg = getLuminance(currentSelection.value) < 0.5;
+                else if (currentSelection.type === 'gradient') isDarkBg = currentSelection.theme === 'dark';
+                dom.preview.classList.toggle('bg-is-dark', isDarkBg);
+            }
+        }
+
+        function applyTheme() {
+            if (!userSettings || !userSettings.theme) return;
+            const isDark = userSettings.theme === 'dark' || (userSettings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            dom.html.classList.toggle('dark', isDark);
+            
+            const primary = isDark ? tailwind.config.theme.extend.colors['dark-primary'] : tailwind.config.theme.extend.colors.primary;
+            const onPrimary = isDark ? tailwind.config.theme.extend.colors['dark-on-primary'] : tailwind.config.theme.extend.colors['on-primary'];
+            document.documentElement.style.setProperty('--primary', primary);
+            document.documentElement.style.setProperty('--on-primary', onPrimary);
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

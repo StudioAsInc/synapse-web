@@ -1,0 +1,9 @@
+{
+  "apiKey": "AIzaSyCJSkL4MsVRVwb9sWGvkFQHz-RaGUY-2xo",
+  "authDomain": "https://sai-synapse-default-rtdb.firebaseio.com",
+  "projectId": "sai-synapse",
+  "storageBucket": "sai-synapse.firebasestorage.app",
+  "messagingSenderId": "269633434355",
+  "appId": "1:308269400761:android:91c2e7415671cc49ed9168",
+  "databaseURL": "https://sai-synapse-default-rtdb.firebaseio.com/"
+}

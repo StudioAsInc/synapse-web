@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post View | Synapse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Material Symbols Rounded -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=verified,lock,warning,login,home,more_horiz,favorite,comment,share,bookmark,send,close,link,chat_bubble" />
+    <!-- Font Awesome for social media brands (no direct MSR equivalents) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <!-- Lottie Player for loading animation -->
+    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+    <style>
+        .comment-box {
+            transition: all 0.3s ease;
+        }
+        .like-animation {
+            animation: like 0.5s ease;
+        }
+        @keyframes like {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <a href="/" class="text-xl font-bold text-blue-600">Synapse</a>
+            <div id="authButtons">
+                <!-- Authentication buttons will be dynamically managed -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-2xl w-full py-8"> <!-- Removed mx-auto px-4 -->
+        <!-- Login Prompt (hidden by default) -->
+        <div id="loginPrompt" class="hidden bg-white rounded-xl shadow-md p-6 mb-6 text-center">
+            <span class="material-symbols-rounded text-4xl text-blue-500 mb-4">lock</span>
+            <h2 class="text-xl font-semibold mb-2">Login Required</h2>
+            <p class="text-gray-600 mb-4">Please login to view this post and interact with the community</p>
+            <button onclick="redirectToAuth()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-full font-medium transition">
+                <span class="material-symbols-rounded align-middle mr-2">login</span> Login Now
+            </button>
+        </div>
+
+        <!-- Post Not Found (hidden by default) -->
+        <div id="postNotFound" class="hidden bg-white rounded-xl shadow-md p-6 mb-6 text-center">
+            <span class="material-symbols-rounded text-4xl text-yellow-500 mb-4">warning</span>
+            <h2 class="text-xl font-semibold mb-2">Post Not Found</h2>
+            <p class="text-gray-600 mb-4">The post you're looking for doesn't exist or may have been removed</p>
+            <a href="/" class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-full font-medium transition">
+                <span class="material-symbols-rounded align-middle mr-2">home</span> Go Home
+            </a>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="bg-white rounded-xl shadow-md p-8 text-center">
+            <!-- Lottie Animation Placeholder -->
+            <lottie-player src="loading.json" background="transparent" speed="1" style="width: 100px; height: 100px; margin: auto;" loop autoplay></lottie-player>
+            <p class="mt-4 text-gray-600">Loading post...</p>
+        </div>
+
+        <!-- Post Container (hidden by default) -->
+        <div id="postContainer" class="hidden bg-white rounded-xl shadow-md overflow-hidden">
+            <!-- Post Header -->
+            <div class="flex items-center p-4 border-b">
+                <img id="userAvatar" src="https://via.placeholder.com/50" alt="User" class="w-12 h-12 rounded-full object-cover mr-3 border border-gray-200">
+                <div class="flex-1">
+                    <div class="flex items-center">
+                        <h2 id="userName" class="font-semibold text-gray-800"></h2>
+                        <span id="verifiedBadge" class="ml-1 text-blue-500 hidden"><span class="material-symbols-rounded text-base">verified</span></span>
+                    </div>
+                    <p id="postDate" class="text-xs text-gray-500"></p>
+                </div>
+                <button class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-rounded">more_horiz</span>
+                </button>
+            </div>
+            
+            <!-- Post Content -->
+            <div class="p-4">
+                <p id="postText" class="text-gray-800 mb-4 whitespace-pre-line"></p>
+                <div id="postImageContainer" class="rounded-lg overflow-hidden mb-4 hidden">
+                    <img id="postImage" src="" alt="Post image" class="w-full h-auto max-h-96 object-contain rounded-lg">
+                </div>
+                <div id="postVideoContainer" class="hidden">
+                    <!-- Video player would go here -->
+                </div>
+            </div>
+            
+            <!-- Post Actions -->
+            <div class="px-4 py-3 border-t border-b flex justify-between text-gray-500">
+                <button id="likeButton" class="flex items-center space-x-1 hover:text-red-500 transition">
+                    <span class="material-symbols-rounded text-xl">favorite</span>
+                    <span id="likeCount">0</span>
+                </button>
+                <button id="commentButton" class="flex items-center space-x-1 hover:text-blue-500 transition">
+                    <span class="material-symbols-rounded text-xl">comment</span>
+                    <span id="commentCount">0</span>
+                </button>
+                <button id="shareButton" class="flex items-center space-x-1 hover:text-green-500 transition">
+                    <span class="material-symbols-rounded text-xl">share</span>
+                    <span>Share</span>
+                </button>
+                <button id="saveButton" class="flex items-center space-x-1 hover:text-purple-500 transition">
+                    <span class="material-symbols-rounded text-xl">bookmark</span>
+                    <span>Save</span>
+                </button>
+            </div>
+            
+            <!-- Comments Section -->
+            <div id="commentsSection" class="p-4">
+                <h3 class="font-semibold text-gray-700 mb-3">Comments</h3>
+                
+                <!-- Comment Input (only shown when logged in and comments not disabled) -->
+                <div id="commentInputContainer" class="hidden mb-4">
+                    <div class="flex items-start space-x-2">
+                        <img id="currentUserAvatar" src="https://via.placeholder.com/40" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                        <div class="flex-1 relative">
+                            <textarea id="commentInput" placeholder="Add a comment..." 
+                                class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent resize-none"></textarea>
+                            <button id="postCommentBtn" class="absolute right-2 bottom-2 text-blue-500 hover:text-blue-700">
+                                <span class="material-symbols-rounded">send</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Comments List -->
+                <div id="commentsContainer" class="space-y-4">
+                    <!-- Comments will be loaded here -->
+                    <div class="text-center py-6 text-gray-500" id="noComments">
+                        <span class="material-symbols-rounded text-2xl mb-2">chat_bubble</span>
+                        <p>No comments yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal (hidden by default) -->
+    <div id="shareModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Share this post</h3>
+                <button onclick="closeShareModal()" class="text-gray-500 hover:text-gray-700">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <button onclick="shareOnFacebook()" class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-100">
+                    <i class="fab fa-facebook text-blue-600 text-2xl mb-1"></i>
+                    <span class="text-xs">Facebook</span>
+                </button>
+                <button onclick="shareOnTwitter()" class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-100">
+                    <i class="fab fa-twitter text-blue-400 text-2xl mb-1"></i>
+                    <span class="text-xs">Twitter</span>
+                </button>
+                <button onclick="shareOnWhatsApp()" class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-100">
+                    <i class="fab fa-whatsapp text-green-500 text-2xl mb-1"></i>
+                    <span class="text-xs">WhatsApp</span>
+                </button>
+                <button onclick="copyLink()" class="flex flex-col items-center p-3 rounded-lg hover:bg-gray-100">
+                    <span class="material-symbols-rounded text-gray-600 text-2xl mb-1">link</span>
+                    <span class="text-xs">Copy Link</span>
+                </button>
+            </div>
+            <div class="flex border rounded-lg overflow-hidden">
+                <input type="text" id="postUrl" readonly class="flex-1 px-3 py-2 outline-none bg-gray-50">
+                <button onclick="copyLink()" class="bg-blue-500 text-white px-4 hover:bg-blue-600">
+                    Copy
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration (using your actual details)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCJSkL4MsVRVwb9sWGvkFQHz-RaGUY-2xo",
+            authDomain: "sai-synapse.firebaseapp.com",
+            databaseURL: "https://sai-synapse-default-rtdb.firebaseio.com",
+            projectId: "sai-synapse",
+            storageBucket: "sai-synapse.appspot.com",
+            messagingSenderId: "308269400761",
+            appId: "1:308269400761:web:your-web-app-id" // Replace with your web app ID
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+        
+        // DOM Elements
+        const elements = {
+            loading: document.getElementById('loadingState'),
+            postContainer: document.getElementById('postContainer'),
+            loginPrompt: document.getElementById('loginPrompt'),
+            postNotFound: document.getElementById('postNotFound'),
+            authButtons: document.getElementById('authButtons'), // This will mostly be empty as per request 7
+            commentInputContainer: document.getElementById('commentInputContainer'),
+            commentsSection: document.getElementById('commentsSection'),
+            saveButton: document.getElementById('saveButton'),
+            likeCountSpan: document.getElementById('likeCount'),
+            commentCountSpan: document.getElementById('commentCount'),
+            currentUserAvatar: document.getElementById('currentUserAvatar'),
+            postUrl: document.getElementById('postUrl'),
+            shareModal: document.getElementById('shareModal')
+        };
+        
+        // Global Variables
+        let currentUser = null;
+        let currentPost = null;
+        let currentPostKey = null; // Store post key globally
+
+        // Initialize the page
+        function init() {
+            currentPostKey = getPostKeyFromUrl();
+            if (!currentPostKey) {
+                showPostNotFound();
+                return;
+            }
+
+            checkAuthState();
+            setupEventListeners();
+        }
+        
+        // Check if user is logged in
+        function checkAuthState() {
+            auth.onAuthStateChanged(user => {
+                currentUser = user;
+                updateAuthUI();
+                
+                if (currentUser) {
+                    loadPost(currentPostKey);
+                } else {
+                    showLoginPrompt();
+                }
+            });
+        }
+        
+        // Update UI based on auth state
+        function updateAuthUI() {
+            // As per request 7, no login/logout buttons here
+            elements.authButtons.innerHTML = ''; 
+
+            if (currentUser) {
+                if (elements.currentUserAvatar) {
+                    elements.currentUserAvatar.src = currentUser.photoURL || 'https://via.placeholder.com/40';
+                }
+            }
+        }
+        
+        // Get post key from URL
+        function getPostKeyFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('post');
+        }
+        
+        // Load post data
+        function loadPost(postKey) {
+            elements.loading.classList.remove('hidden');
+            elements.postContainer.classList.add('hidden');
+            elements.loginPrompt.classList.add('hidden');
+            elements.postNotFound.classList.add('hidden');
+            
+            database.ref(`skyline/posts/${postKey}`).once('value')
+                .then(snapshot => {
+                    const postData = snapshot.val();
+                    if (!postData) {
+                        showPostNotFound();
+                        return;
+                    }
+                    
+                    currentPost = postData;
+                    renderPost(postData);
+                    loadPostAuthor(postData.uid);
+                    loadLikes(postKey);
+                    loadComments(postKey);
+                    
+                    // Update URL in share modal
+                    elements.postUrl.value = window.location.href;
+                })
+                .catch(error => {
+                    console.error("Error loading post:", error);
+                    showPostNotFound();
+                });
+        }
+        
+        // Render post data
+        function renderPost(postData) {
+            document.getElementById('postText').textContent = postData.post_text || '';
+            document.getElementById('postDate').textContent = formatDate(postData.publish_date);
+            
+            // Handle post image
+            if (postData.post_image) {
+                document.getElementById('postImage').src = postData.post_image;
+                document.getElementById('postImageContainer').classList.remove('hidden');
+            } else {
+                document.getElementById('postImageContainer').classList.add('hidden');
+            }
+            
+            // Handle post type (image, video, text) - existing logic for image
+            if (postData.post_type === 'IMAGE' && postData.post_image) {
+                document.getElementById('postImageContainer').classList.remove('hidden');
+            } else if (postData.post_type === 'VIDEO') {
+                // You would implement video player here, currently hidden
+                document.getElementById('postVideoContainer').classList.remove('hidden'); // Show video container
+                // Example: document.getElementById('postVideo').src = postData.post_video_url;
+            } else {
+                document.getElementById('postImageContainer').classList.add('hidden');
+                document.getElementById('postVideoContainer').classList.add('hidden');
+            }
+
+            // Apply post settings (Request 2)
+            if (postData.post_disable_comments === "true") {
+                elements.commentsSection.classList.add('hidden');
+                elements.commentInputContainer.classList.add('hidden');
+            } else {
+                elements.commentsSection.classList.remove('hidden');
+                if (currentUser) { // Only show input if logged in
+                    elements.commentInputContainer.classList.remove('hidden');
+                }
+            }
+
+            if (postData.post_disable_favorite === "true") {
+                elements.saveButton.classList.add('hidden');
+            } else {
+                elements.saveButton.classList.remove('hidden');
+            }
+
+            if (postData.post_hide_like_count === "true") {
+                elements.likeCountSpan.classList.add('hidden');
+            } else {
+                elements.likeCountSpan.classList.remove('hidden');
+            }
+
+            if (postData.post_hide_comments_count === "true") {
+                elements.commentCountSpan.classList.add('hidden');
+            } else {
+                elements.commentCountSpan.classList.remove('hidden');
+            }
+            
+            elements.loading.classList.add('hidden');
+            elements.postContainer.classList.remove('hidden');
+        }
+        
+        // Load post author
+        function loadPostAuthor(userId) {
+            database.ref(`skyline/users/${userId}`).once('value')
+                .then(snapshot => {
+                    const userData = snapshot.val();
+                    if (userData) {
+                        document.getElementById('userName').textContent = userData.nickname || userData.username;
+                        
+                        if (userData.avatar && userData.avatar !== 'null') {
+                            document.getElementById('userAvatar').src = userData.avatar;
+                        }
+                        
+                        if (userData.verify === "true") {
+                            document.getElementById('verifiedBadge').classList.remove('hidden');
+                        } else {
+                            document.getElementById('verifiedBadge').classList.add('hidden');
+                        }
+                    }
+                });
+        }
+        
+        // Load likes for the post
+        function loadLikes(postKey) {
+            database.ref(`skyline/posts-likes/${postKey}`).on('value', snapshot => {
+                const likes = snapshot.val() || {};
+                const likeCount = Object.keys(likes).length;
+                elements.likeCountSpan.textContent = likeCount; // Use elements.likeCountSpan
+                
+                // Check if current user liked this post
+                const isLiked = currentUser && likes[currentUser.uid];
+                const likeIcon = document.querySelector('#likeButton .material-symbols-rounded'); // Select MSR icon
+                
+                if (isLiked) {
+                    likeIcon.style.fontVariationSettings = "'FILL' 1"; // Set FILL to 1
+                    likeIcon.classList.add('text-red-500');
+                } else {
+                    likeIcon.style.fontVariationSettings = "'FILL' 0"; // Set FILL to 0
+                    likeIcon.classList.remove('text-red-500');
+                }
+            });
+        }
+        
+        // Load comments
+        function loadComments(postKey) {
+            database.ref(`skyline/posts-comments/${postKey}`).on('value', snapshot => {
+                const comments = snapshot.val() || {};
+                const commentsContainer = document.getElementById('commentsContainer');
+                const noComments = document.getElementById('noComments');
+                
+                if (Object.keys(comments).length === 0) {
+                    noComments.classList.remove('hidden');
+                    commentsContainer.innerHTML = '';
+                    commentsContainer.appendChild(noComments);
+                    elements.commentCountSpan.textContent = '0'; // Use elements.commentCountSpan
+                    return;
+                }
+                
+                noComments.classList.add('hidden');
+                commentsContainer.innerHTML = '';
+                
+                // Convert to array and sort by date (newest first)
+                const commentsArray = Object.entries(comments).map(([key, value]) => ({
+                    id: key,
+                    ...value
+                })).sort((a, b) => b.push_time - a.push_time);
+                
+                elements.commentCountSpan.textContent = commentsArray.length; // Use elements.commentCountSpan
+                
+                commentsArray.forEach(comment => {
+                    const commentElement = createCommentElement(comment);
+                    commentsContainer.appendChild(commentElement);
+                });
+            });
+        }
+        
+        // Create comment element
+        function createCommentElement(comment) {
+            const commentElement = document.createElement('div');
+            commentElement.className = 'flex space-x-3 comment-box';
+            commentElement.setAttribute('data-comment-id', comment.id); // Add data attribute for comment ID
+            commentElement.innerHTML = `
+                <img src="https://via.placeholder.com/40" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                <div class="flex-1">
+                    <div class="bg-gray-100 rounded-lg p-3">
+                        <div class="flex items-center mb-1">
+                            <span class="font-semibold text-sm mr-2 comment-author-name">${comment.uid}</span>
+                            <span class="text-xs text-gray-500">${formatDate(comment.push_time)}</span>
+                        </div>
+                        <p class="text-gray-800 text-sm">${comment.comment}</p>
+                    </div>
+                    <div class="flex space-x-4 mt-1 px-1 text-gray-500">
+                        <button class="flex items-center space-x-1 text-xs hover:text-blue-700 reply-button">
+                            <span class="material-symbols-rounded text-base">reply</span> <span>Reply</span>
+                        </button>
+                        <button class="flex items-center space-x-1 text-xs hover:text-red-700 comment-like-button">
+                            <span class="material-symbols-rounded text-base">favorite</span> <span class="comment-like-count">0</span>
+                        </button>
+                    </div>
+                    <div class="replies-container mt-2 ml-8 space-y-2 hidden">
+                        <!-- Replies will be loaded here -->
+                        <p class="text-xs text-gray-500">No replies yet.</p>
+                    </div>
+                </div>
+            `;
+            
+            // Load comment author avatar and name
+            const commentAuthorNameSpan = commentElement.querySelector('.comment-author-name');
+            database.ref(`skyline/users/${comment.uid}`).once('value')
+                .then(snapshot => {
+                    const userData = snapshot.val();
+                    if (userData) {
+                        if (userData.avatar && userData.avatar !== 'null') {
+                            commentElement.querySelector('img').src = userData.avatar;
+                        }
+                        commentAuthorNameSpan.textContent = userData.nickname || userData.username;
+                    }
+                });
+
+            // Load comment likes
+            const commentLikeButton = commentElement.querySelector('.comment-like-button');
+            const commentLikeIcon = commentLikeButton.querySelector('.material-symbols-rounded');
+            const commentLikeCountSpan = commentLikeButton.querySelector('.comment-like-count');
+
+            database.ref(`skyline/posts-comments-like/${currentPostKey}/${comment.id}`).on('value', snapshot => {
+                const commentLikes = snapshot.val() || {};
+                const currentCommentLikeCount = Object.keys(commentLikes).length;
+                commentLikeCountSpan.textContent = currentCommentLikeCount;
+
+                const isCommentLikedByCurrentUser = currentUser && commentLikes[currentUser.uid];
+                if (isCommentLikedByCurrentUser) {
+                    commentLikeIcon.style.fontVariationSettings = "'FILL' 1";
+                    commentLikeIcon.classList.add('text-red-500');
+                } else {
+                    commentLikeIcon.style.fontVariationSettings = "'FILL' 0";
+                    commentLikeIcon.classList.remove('text-red-500');
+                }
+            });
+
+            commentLikeButton.addEventListener('click', () => toggleCommentLike(comment.id, commentLikeIcon));
+
+            // Reply button (placeholder)
+            const replyButton = commentElement.querySelector('.reply-button');
+            replyButton.addEventListener('click', () => {
+                if (!currentUser) {
+                    showLoginPrompt();
+                    return;
+                }
+                alert('Reply feature coming soon!'); // Placeholder for reply functionality
+            });
+            
+            return commentElement;
+        }
+
+        // Toggle like on comment
+        function toggleCommentLike(commentId, likeIconElement) {
+            if (!currentUser) {
+                showLoginPrompt();
+                return;
+            }
+
+            if (!currentPostKey) return;
+
+            const commentLikeRef = database.ref(`skyline/posts-comments-like/${currentPostKey}/${commentId}/${currentUser.uid}`);
+
+            commentLikeRef.once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    // Unlike
+                    commentLikeRef.remove();
+                } else {
+                    // Like
+                    commentLikeRef.set(currentUser.uid);
+                    
+                    // Add like animation
+                    likeIconElement.classList.add('like-animation');
+                    setTimeout(() => {
+                        likeIconElement.classList.remove('like-animation');
+                    }, 500);
+                }
+            }).catch(error => {
+                console.error("Error toggling comment like:", error);
+            });
+        }
+        
+        // Toggle like on post
+        function toggleLike() {
+            if (!currentUser) {
+                showLoginPrompt();
+                return;
+            }
+            
+            const postKey = getPostKeyFromUrl();
+            if (!postKey) return;
+            
+            const likeRef = database.ref(`skyline/posts-likes/${postKey}/${currentUser.uid}`);
+            
+            likeRef.once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    // Unlike
+                    likeRef.remove();
+                } else {
+                    // Like
+                    likeRef.set(currentUser.uid);
+                    
+                    // Add like animation
+                    const likeIcon = document.querySelector('#likeButton .material-symbols-rounded'); // Select MSR icon
+                    likeIcon.classList.add('like-animation');
+                    setTimeout(() => {
+                        likeIcon.classList.remove('like-animation');
+                    }, 500);
+                }
+            }).catch(error => {
+                console.error("Error toggling post like:", error);
+            });
+        }
+        
+        // Post a new comment
+        function postComment() {
+            if (!currentUser) {
+                showLoginPrompt();
+                return;
+            }
+            
+            const postKey = getPostKeyFromUrl();
+            const commentInput = document.getElementById('commentInput');
+            const commentText = commentInput.value.trim();
+            
+            if (!commentText || !postKey) return;
+            
+            const newCommentRef = database.ref(`skyline/posts-comments/${postKey}`).push();
+            
+            newCommentRef.set({
+                comment: commentText,
+                uid: currentUser.uid,
+                push_time: Date.now(),
+                like: "0" // Initial like count, will be updated by listener for posts-comments-like
+            }).then(() => {
+                commentInput.value = '';
+            }).catch(error => {
+                console.error("Error posting comment:", error);
+            });
+        }
+        
+        // Share functions
+        function openShareModal() {
+            if (!currentUser) {
+                showLoginPrompt();
+                return;
+            }
+            elements.shareModal.classList.remove('hidden');
+        }
+        
+        function closeShareModal() {
+            elements.shareModal.classList.add('hidden');
+        }
+        
+        function shareOnFacebook() {
+            const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`;
+            window.open(url, '_blank', 'width=600,height=400');
+        }
+        
+        function shareOnTwitter() {
+            const text = `Check out this post on Synapse: ${document.getElementById('postText').textContent.substring(0, 100)}...`;
+            const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`;
+            window.open(url, '_blank', 'width=600,height=400');
+        }
+        
+        function shareOnWhatsApp() {
+            const text = `Check out this post: ${window.location.href}`;
+            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+        
+        function copyLink() {
+            elements.postUrl.select();
+            document.execCommand('copy');
+            
+            // Show copied feedback
+            const copyBtn = elements.shareModal.querySelector('button.bg-blue-500'); // Select the copy button
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+        
+        // Auth redirection
+        function redirectToAuth() {
+            window.location.href = '/authenticate.html'; // Redirect to authenticate.html
+        }
+        
+        // Helper functions
+        function formatDate(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(parseInt(timestamp));
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function showLoginPrompt() {
+            elements.loading.classList.add('hidden');
+            elements.postContainer.classList.add('hidden');
+            elements.postNotFound.classList.add('hidden');
+            elements.loginPrompt.classList.remove('hidden');
+        }
+        
+        function showPostNotFound() {
+            elements.loading.classList.add('hidden');
+            elements.postContainer.classList.add('hidden');
+            elements.loginPrompt.classList.add('hidden');
+            elements.postNotFound.classList.remove('hidden');
+        }
+        
+        // Event listeners
+        function setupEventListeners() {
+            // Like button
+            document.getElementById('likeButton').addEventListener('click', toggleLike);
+            
+            // Comment button focuses comment input
+            document.getElementById('commentButton').addEventListener('click', () => {
+                if (!currentUser) {
+                    showLoginPrompt();
+                    return;
+                }
+                document.getElementById('commentInput').focus();
+            });
+            
+            // Share button
+            document.getElementById('shareButton').addEventListener('click', openShareModal);
+
+            // Save button - currently not implemented but added for future functionality/consistency with requirements
+            document.getElementById('saveButton').addEventListener('click', () => {
+                if (!currentUser) {
+                    showLoginPrompt();
+                    return;
+                }
+                alert('Save feature coming soon!'); 
+            });
+            
+            // Post comment on Enter key or button click
+            document.getElementById('commentInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    postComment();
+                }
+            });
+            
+            document.getElementById('postCommentBtn').addEventListener('click', postComment);
+        }
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
